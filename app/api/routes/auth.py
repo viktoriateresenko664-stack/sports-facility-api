@@ -131,7 +131,7 @@ def me(principal: AuthPrincipal = Depends(get_current_principal), db: Session = 
     return AuthService.me_for_employee(db, employee)
 
 
-@router.patch(
+@router.post(
     "/me",
     response_model=AuthMeResponse,
     responses=AUTH_RESPONSES,
