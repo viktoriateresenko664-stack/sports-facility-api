@@ -2,6 +2,13 @@
 
 FastAPI backend for web/mobile/desktop clients with a single API source of truth.
 
+## Defense Documents
+- Full product manual (non-code): `docs/readme_manual.md`
+- Test plan: `docs/test_plan.md`
+- SAD: `docs/sad.md`
+- Risk register: `docs/risk_register.md`
+- Presentation outline: `docs/presentation_outline.md`
+
 ## Architecture
 - FastAPI + SQLAlchemy 2.0 + Alembic
 - Supabase PostgreSQL
