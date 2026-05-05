@@ -65,6 +65,7 @@ def list_engineer_tasks(
     status_filter: str | None = Query(default=None, alias="status"),
     facility_id: int | None = None,
     assigned_engineer: int | None = None,
+    assigned_engineer_id: int | None = Query(default=None, alias="assigned_engineer_id"),
     date_from: datetime | None = None,
     date_to: datetime | None = None,
     page: int | None = Query(default=None, ge=1),
@@ -80,10 +81,21 @@ def list_engineer_tasks(
     if status_filter is not None and normalized_status is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported status filter")
 
+    if (
+        assigned_engineer is not None
+        and assigned_engineer_id is not None
+        and assigned_engineer != assigned_engineer_id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="assigned_engineer and assigned_engineer_id must match when both are provided",
+        )
+
+    requested_engineer = assigned_engineer_id if assigned_engineer_id is not None else assigned_engineer
     privileged = bool({"OPERATOR", "CHIEF_ENGINEER", "ADMIN"}.intersection(set(principal.roles)))
-    target_engineer = assigned_engineer
+    target_engineer = requested_engineer
     if not privileged:
-        if assigned_engineer is not None and assigned_engineer != employee.employee_id:
+        if requested_engineer is not None and requested_engineer != employee.employee_id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Engineer can view only own tasks")
         target_engineer = employee.employee_id
 

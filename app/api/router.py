@@ -29,7 +29,7 @@ router = APIRouter()
     description="Returns health status for the API v1 namespace.",
 )
 def health_check() -> HealthResponse:
-    return HealthResponse(status="ok")
+    return HealthResponse(status="ok", service="sports-facility-api")
 
 
 router.include_router(auth.router)

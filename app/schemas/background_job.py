@@ -37,3 +37,11 @@ class BackgroundJobResponse(BaseModel):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ReportJobStatusResponse(BaseModel):
+    job_id: str
+    status: str
+    report_id: int | None = None
+    error: str | None = None
+    model_config = ConfigDict(extra="forbid")

@@ -201,6 +201,7 @@ def desktop_requests(
     status_filter: str | None = Query(default=None, alias="status"),
     facility_id: int | None = None,
     assigned_engineer: int | None = None,
+    assigned_engineer_id: int | None = Query(default=None, alias="assigned_engineer_id"),
     date_from: datetime | None = None,
     date_to: datetime | None = None,
     page: int | None = Query(default=None, ge=1),
@@ -217,12 +218,23 @@ def desktop_requests(
     if status_filter is not None and normalized_status is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported status filter")
 
+    if (
+        assigned_engineer is not None
+        and assigned_engineer_id is not None
+        and assigned_engineer != assigned_engineer_id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="assigned_engineer and assigned_engineer_id must match when both are provided",
+        )
+    requested_engineer = assigned_engineer_id if assigned_engineer_id is not None else assigned_engineer
+
     pagination = resolve_pagination(page, limit)
-    scoped_engineer = assigned_engineer
+    scoped_engineer = requested_engineer
     if _is_desktop_privileged(principal):
         pass
     else:
-        if assigned_engineer is not None and assigned_engineer != employee.employee_id:
+        if requested_engineer is not None and requested_engineer != employee.employee_id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Engineer can view only assigned requests")
         scoped_engineer = employee.employee_id
 
@@ -488,6 +500,7 @@ def desktop_logs(
 def desktop_reports(
     facility_id: int | None = None,
     engineer_id: int | None = None,
+    assigned_engineer_id: int | None = Query(default=None, alias="assigned_engineer_id"),
     source: str | None = None,
     created_from: datetime | None = None,
     created_to: datetime | None = None,
@@ -503,9 +516,16 @@ def desktop_reports(
     if created_from and created_to and created_from > created_to:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="created_from must be before created_to")
 
+    if engineer_id is not None and assigned_engineer_id is not None and engineer_id != assigned_engineer_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="engineer_id and assigned_engineer_id must match when both are provided",
+        )
+    requested_engineer_id = assigned_engineer_id if assigned_engineer_id is not None else engineer_id
+
     normalized_source = _normalize_reports_source(source)
     normalized_facility_id = facility_id if facility_id and facility_id > 0 else None
-    normalized_engineer_id = engineer_id if engineer_id and engineer_id > 0 else None
+    normalized_engineer_id = requested_engineer_id if requested_engineer_id and requested_engineer_id > 0 else None
 
     privileged = _is_desktop_privileged(principal)
     if not privileged and normalized_engineer_id is not None and normalized_engineer_id != employee.employee_id:

@@ -1,5 +1,6 @@
 import logging
 from datetime import UTC, datetime
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Header, Query, UploadFile, status
 from fastapi.responses import FileResponse
@@ -17,6 +18,7 @@ from app.models.engineer_report import EngineerReport
 from app.models.engineer_task import EngineerTask
 from app.models.enums import AccountType, LogStatus, TaskStatus
 from app.schemas.background_job import BackgroundJobResponse
+from app.schemas.background_job import ReportJobStatusResponse
 from app.schemas.engineer_report import (
     EngineerReportFileResponse,
     EngineerReportsPageResponse,
@@ -104,6 +106,49 @@ def _to_report_file_response(report: EngineerReport) -> EngineerReportFileRespon
         size_bytes=int(size_bytes) if isinstance(size_bytes, int) else None,
         download_url=f"/reports/{report.report_id}/download",
     )
+
+
+_REPORT_JOB_STATUS_MAP = {
+    "PENDING": "CREATED",
+    "PROCESSING": "ACTIVE",
+    "SUCCESS": "COMPLETED",
+    "FAILED": "CANCELLED",
+}
+
+
+def _to_report_job_status_response(job) -> ReportJobStatusResponse:  # type: ignore[no-untyped-def]
+    raw_status = str(getattr(job, "status", "") or "").upper()
+    mapped_status = _REPORT_JOB_STATUS_MAP.get(raw_status, "CREATED")
+    report_id = None
+    result = getattr(job, "result", None)
+    if isinstance(result, dict):
+        result_report_id = result.get("report_id")
+        if isinstance(result_report_id, int):
+            report_id = result_report_id
+        elif isinstance(result_report_id, str) and result_report_id.isdigit():
+            report_id = int(result_report_id)
+    error_text = getattr(job, "error", None)
+    return ReportJobStatusResponse(
+        job_id=str(job.job_id),
+        status=mapped_status,
+        report_id=report_id,
+        error=str(error_text) if isinstance(error_text, str) and error_text.strip() else None,
+    )
+
+
+def _assert_job_access(principal: AuthPrincipal, job) -> None:  # type: ignore[no-untyped-def]
+    is_admin = "ADMIN" in principal.roles
+    if is_admin:
+        return
+    if principal.account_type == AccountType.USER:
+        if not (job.owner_type == AccountType.USER and job.owner_id == principal.subject_id):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+        return
+    if principal.account_type == AccountType.EMPLOYEE:
+        if not (job.owner_type == AccountType.EMPLOYEE and job.owner_id == principal.subject_id):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+        return
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
 
 @router.get(
@@ -292,6 +337,7 @@ def upload_report_file(
 def list_reports(
     engineer_id: int | None = None,
     assigned_engineer: int | None = None,
+    assigned_engineer_id: int | None = Query(default=None, alias="assigned_engineer_id"),
     status_filter: str | None = Query(default=None, alias="status"),
     facility_id: int | None = None,
     date_from: datetime | None = None,
@@ -309,10 +355,19 @@ def list_reports(
     if status_filter is not None and normalized_status is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported status filter")
 
+    if assigned_engineer is not None and assigned_engineer_id is not None and assigned_engineer != assigned_engineer_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="assigned_engineer and assigned_engineer_id must match when both are provided",
+        )
+    requested_assigned_engineer = (
+        assigned_engineer_id if assigned_engineer_id is not None else assigned_engineer
+    )
+
     query = db.query(EngineerReport).join(EngineerTask, EngineerTask.task_id == EngineerReport.task_id)
     pagination = resolve_pagination(page, limit)
 
-    requested_engineer = assigned_engineer if assigned_engineer is not None else engineer_id
+    requested_engineer = requested_assigned_engineer if requested_assigned_engineer is not None else engineer_id
 
     if _is_privileged(principal):
         if requested_engineer is not None:
@@ -458,6 +513,25 @@ def preview_uploaded_report_file(
         media_type=content_type,
         content_disposition_type="inline",
     )
+
+
+@router.get(
+    "/jobs/{job_id}",
+    response_model=ReportJobStatusResponse,
+    responses=REPORT_RESPONSES,
+    summary="Get Report Generation Job Status",
+    description="Returns report generation job status in report workflow format.",
+)
+def get_report_job_status(
+    job_id: UUID,
+    db: Session = Depends(get_db),
+    principal: AuthPrincipal = Depends(require_roles("ENGINEER", "OPERATOR", "CHIEF_ENGINEER", "ADMIN", "USER")),
+) -> ReportJobStatusResponse:
+    job = job_service.get_job(db, job_id)
+    if not job:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+    _assert_job_access(principal, job)
+    return _to_report_job_status_response(job)
 
 
 @router.post(

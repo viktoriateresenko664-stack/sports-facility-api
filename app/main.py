@@ -102,7 +102,18 @@ async def shutdown_tasks() -> None:
     description="Returns the public health status of the API service.",
 )
 def root_health() -> HealthResponse:
-    return HealthResponse(status="ok")
+    return HealthResponse(status="ok", service="sports-facility-api")
+
+
+@app.get(
+    "/",
+    tags=["health"],
+    response_model=HealthResponse,
+    summary="Root Health Check",
+    description="Returns the public health status of the API service root endpoint.",
+)
+def root_index_health() -> HealthResponse:
+    return HealthResponse(status="ok", service="sports-facility-api")
 
 
 @app.get("/docs", include_in_schema=False)

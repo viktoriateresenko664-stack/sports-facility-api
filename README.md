@@ -12,7 +12,7 @@ FastAPI backend for web/mobile/desktop clients with a single API source of truth
 
 ## API split (CQRS)
 - Command endpoints (write):
-  - `PATCH /auth/me`
+  - `POST /auth/me`
   - `POST /user-requests`
   - `POST /engineer-tasks`
   - `POST /engineer-tasks/{task_id}/start`
@@ -39,6 +39,7 @@ FastAPI backend for web/mobile/desktop clients with a single API source of truth
   - `GET /bff/desktop/requests/my` (engineer-only)
   - `GET /reports/template`
   - `GET /reports/my`
+  - `GET /reports/jobs/{job_id}`
   - `GET /reports/{report_id}/download`
   - `GET /reports/{report_id}/preview`
 
@@ -102,6 +103,7 @@ Flow: `command -> domain_event -> queue -> worker`
 - Build command: `pip install -r requirements.txt`
 - Start command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
 - Health check endpoint: `GET /health` (returns `{"status":"ok"}`)
+- Root health endpoint: `GET /` (returns `{"status":"ok","service":"sports-facility-api"}`)
 - Required env:
   - `APP_ENV=production`
   - `DEBUG=false`
@@ -152,7 +154,7 @@ See `.env.example` (includes `CORS_ORIGINS`, token TTLs).
 
 ## Manual checks
 - Auth: register/login/employee-login/refresh/logout
-- Auth: update own user profile (`PATCH /auth/me`) including phone/email/username
+- Auth: update own user profile (`POST /auth/me`) including phone/email/username
 - Auth: change password (`POST /auth/change-password`) with current password check
 - Lifecycle transitions + invalid transition
 - RBAC and ownership checks
