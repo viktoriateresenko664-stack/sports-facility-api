@@ -2,8 +2,11 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from fastapi import HTTPException
+
 from app.models.enums import AccountType
 from app.schemas.auth import AuthMeResponse, TokenResponse
+from app.schemas.auth import UpdateUserProfileRequest
 from app.services.auth_service import AuthService
 
 
@@ -105,3 +108,20 @@ def test_auth_me_post_update(client, monkeypatch, tokens, auth_header):
     )
     assert response.status_code == 200
     assert response.json()["subject_id"] == 100
+
+
+def test_auth_service_detects_duplicate_phone_with_normalization(dummy_db):
+    duplicate = AuthService._find_user_with_same_phone(dummy_db, phone="8 (000) 000-00-00")
+    assert duplicate is not None
+    assert duplicate.user_id == 100
+
+
+def test_auth_service_update_profile_rejects_duplicate_phone(dummy_db):
+    user = dummy_db.users[100]
+    payload = UpdateUserProfileRequest(phone="+7 (111) 111-11-11")
+    try:
+        AuthService.update_user_profile(dummy_db, user=user, payload=payload)
+        assert False, "Expected HTTPException for duplicate phone"
+    except HTTPException as exc:
+        assert exc.status_code == 409
+        assert exc.detail == "Phone already registered"

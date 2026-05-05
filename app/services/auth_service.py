@@ -1,4 +1,5 @@
 import logging
+import re
 from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException, status
@@ -39,6 +40,38 @@ logger = logging.getLogger(__name__)
 
 
 class AuthService:
+    @staticmethod
+    def _normalize_phone_for_uniqueness(phone: str | None) -> str | None:
+        if phone is None:
+            return None
+        # Keep only digits to avoid duplicates with different formatting.
+        digits = re.sub(r"\D", "", phone)
+        if not digits:
+            return None
+        # Normalize common RU local prefix.
+        if len(digits) == 11 and digits.startswith("8"):
+            digits = "7" + digits[1:]
+        return digits
+
+    @staticmethod
+    def _find_user_with_same_phone(
+        db: Session,
+        *,
+        phone: str | None,
+        exclude_user_id: int | None = None,
+    ) -> User | None:
+        normalized_target = AuthService._normalize_phone_for_uniqueness(phone)
+        if normalized_target is None:
+            return None
+        candidates = db.query(User).filter(User.phone.is_not(None)).all()
+        for candidate in candidates:
+            if exclude_user_id is not None and candidate.user_id == exclude_user_id:
+                continue
+            candidate_normalized = AuthService._normalize_phone_for_uniqueness(candidate.phone)
+            if candidate_normalized == normalized_target:
+                return candidate
+        return None
+
     @staticmethod
     def _auth_actor_kwargs(db: Session, *, account_type: AccountType, subject_id: int) -> dict[str, int]:
         if account_type == AccountType.USER:
@@ -99,6 +132,10 @@ class AuthService:
         if exists:
             logger.warning("Registration failed: email already exists: %s", normalized_email)
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
+        duplicate_phone_user = AuthService._find_user_with_same_phone(db, phone=payload.phone)
+        if duplicate_phone_user:
+            logger.warning("Registration failed: phone already exists")
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Phone already registered")
 
         user = User(
             username=payload.username,
@@ -471,6 +508,13 @@ class AuthService:
             changed_fields.append("email")
 
         if "phone" in fields_set:
+            duplicate_phone_user = AuthService._find_user_with_same_phone(
+                db,
+                phone=payload.phone,
+                exclude_user_id=user.user_id,
+            )
+            if duplicate_phone_user:
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Phone already registered")
             user.phone = payload.phone
             changed_fields.append("phone")
 
