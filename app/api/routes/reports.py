@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Header, Query, UploadFile, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -412,21 +412,46 @@ def download_uploaded_report_file(
     db: Session = Depends(get_db),
     employee: Employee = Depends(get_current_employee),
     principal: AuthPrincipal = Depends(require_roles("ENGINEER", "OPERATOR", "CHIEF_ENGINEER")),
-) -> FileResponse:
+) -> Response:
     report = db.get(EngineerReport, report_id)
     if not report:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found")
 
     _get_accessible_task_or_404(db, report.task_id, employee, principal)
 
+    metadata = ReportService.parse_uploaded_file_metadata(report.report_text)
     file_path = ReportService.resolve_stored_file_path(report)
     if file_path is None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Report has no uploaded file available for download",
+        if metadata is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Uploaded report file is missing in storage",
+            )
+        generated_text = report.report_text if isinstance(report.report_text, str) else ""
+        if not generated_text.strip():
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Report has no downloadable content",
+            )
+        fallback_filename = f"report_{report.report_id}_task_{report.task_id}.txt"
+        LogService.log_action(
+            db,
+            actor_employee_id=employee.employee_id,
+            user_role="ENGINEER",
+            action_type="DOWNLOAD_REPORT_TEXT",
+            entity_type="engineer_reports",
+            entity_id=str(report.report_id),
+            status=LogStatus.SUCCESS,
+            details={"task_id": report.task_id},
+        )
+        db.commit()
+        return Response(
+            content=generated_text,
+            media_type="text/plain; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{fallback_filename}"'},
         )
 
-    metadata = ReportService.parse_uploaded_file_metadata(report.report_text) or {}
+    metadata = metadata or {}
     download_name = metadata.get("original_filename")
     stored_filename = metadata.get("stored_filename")
     content_type = ReportService.resolve_safe_content_type(
@@ -466,21 +491,46 @@ def preview_uploaded_report_file(
     db: Session = Depends(get_db),
     employee: Employee = Depends(get_current_employee),
     principal: AuthPrincipal = Depends(require_roles("ENGINEER", "CHIEF_ENGINEER", "OPERATOR")),
-) -> FileResponse:
+) -> Response:
     report = db.get(EngineerReport, report_id)
     if not report:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found")
 
     _get_accessible_task_or_404(db, report.task_id, employee, principal)
 
+    metadata = ReportService.parse_uploaded_file_metadata(report.report_text)
     file_path = ReportService.resolve_stored_file_path(report)
     if file_path is None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Report has no uploaded file available for preview",
+        if metadata is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Uploaded report file is missing in storage",
+            )
+        generated_text = report.report_text if isinstance(report.report_text, str) else ""
+        if not generated_text.strip():
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Report has no preview content",
+            )
+        fallback_filename = f"report_{report.report_id}_task_{report.task_id}.txt"
+        LogService.log_action(
+            db,
+            actor_employee_id=employee.employee_id,
+            user_role="ENGINEER",
+            action_type="PREVIEW_REPORT_TEXT",
+            entity_type="engineer_reports",
+            entity_id=str(report.report_id),
+            status=LogStatus.SUCCESS,
+            details={"task_id": report.task_id},
+        )
+        db.commit()
+        return Response(
+            content=generated_text,
+            media_type="text/plain; charset=utf-8",
+            headers={"Content-Disposition": f'inline; filename="{fallback_filename}"'},
         )
 
-    metadata = ReportService.parse_uploaded_file_metadata(report.report_text) or {}
+    metadata = metadata or {}
     preview_name = metadata.get("original_filename")
     stored_filename = metadata.get("stored_filename")
     content_type = ReportService.resolve_safe_content_type(

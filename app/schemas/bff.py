@@ -150,6 +150,26 @@ class DesktopAssignEngineerResponse(BaseModel):
     status: str
 
 
+class DesktopCreateSensorTaskRequest(BaseModel):
+    facility_id: int
+    assigned_engineer_id: int
+    description: str = Field(min_length=3, max_length=4000)
+    title: str | None = Field(default=None, max_length=255)
+    equipment_id: int | None = None
+    sensor_id: int | None = None
+    operator_comment: str | None = Field(default=None, max_length=4000)
+    model_config = ConfigDict(extra="forbid")
+
+
+class DesktopCreateSensorTaskResponse(BaseModel):
+    task_id: int
+    facility_id: int
+    assigned_engineer_id: int
+    status: str
+    job_id: str
+    source: str
+
+
 class DesktopReportItem(BaseModel):
     report_id: int
     task_id: int

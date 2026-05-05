@@ -12,12 +12,16 @@ from app.core.pagination import resolve_pagination
 from app.core.status_normalization import normalize_request_status
 from app.db.session import get_db
 from app.models.employee import Employee
+from app.models.equipment import Equipment
 from app.models.enums import AccountType
 from app.models.enums import RequestStatus
+from app.models.sensor import Sensor
 from app.models.user_request import UserRequest
 from app.schemas.bff import (
     DesktopAssignEngineerRequest,
     DesktopAssignEngineerResponse,
+    DesktopCreateSensorTaskRequest,
+    DesktopCreateSensorTaskResponse,
     DesktopDashboardResponse,
     DesktopEmployeeItem,
     DesktopFacilityItem,
@@ -77,7 +81,7 @@ def _to_desktop_report_item(row: dict[str, object]) -> DesktopReportItem:
     content_type = None
     stored_filename = None
     size_bytes = None
-    has_preview = False
+    has_preview = True
     if metadata:
         original_filename = metadata.get("original_filename") if isinstance(metadata.get("original_filename"), str) else None
         stored_filename = metadata.get("stored_filename") if isinstance(metadata.get("stored_filename"), str) else None
@@ -88,6 +92,8 @@ def _to_desktop_report_item(row: dict[str, object]) -> DesktopReportItem:
         size_value = metadata.get("size_bytes")
         size_bytes = int(size_value) if isinstance(size_value, int) else None
         has_preview = ReportService.is_inline_preview_content_type(content_type)
+    else:
+        content_type = "text/plain; charset=utf-8"
 
     report_id = int(row["report_id"])
     return DesktopReportItem(
@@ -687,7 +693,7 @@ def desktop_report_detail(
     size_bytes = None
     stored_relative_path = None
     stored_filename = None
-    has_preview = False
+    has_preview = True
     if metadata:
         original_filename = metadata.get("original_filename") if isinstance(metadata.get("original_filename"), str) else None
         stored_filename = metadata.get("stored_filename") if isinstance(metadata.get("stored_filename"), str) else None
@@ -703,6 +709,8 @@ def desktop_report_detail(
         size_value = metadata.get("size_bytes")
         size_bytes = int(size_value) if isinstance(size_value, int) else None
         has_preview = ReportService.is_inline_preview_content_type(content_type)
+    else:
+        content_type = "text/plain; charset=utf-8"
 
     return DesktopReportDetailResponse(
         report_id=int(row["report_id"]),
@@ -778,4 +786,82 @@ def desktop_assign_engineer(
         assigned_engineer_id=task.assigned_engineer_id,
         job_id=job_id,
         status=task.status.value if hasattr(task.status, "value") else str(task.status),
+    )
+
+
+@router.post(
+    "/tasks/create-from-sensor",
+    response_model=DesktopCreateSensorTaskResponse,
+    summary="Create Sensor-Based Desktop Task",
+    description=(
+        "Creates an engineer task directly from desktop object/sensor context. "
+        "Intended for CHIEF_ENGINEER workflow without user request assignment."
+    ),
+)
+def desktop_create_task_from_sensor(
+    payload: DesktopCreateSensorTaskRequest,
+    db: Session = Depends(get_db),
+    principal: AuthPrincipal = Depends(get_current_principal),
+    _=Depends(require_roles("CHIEF_ENGINEER")),
+) -> DesktopCreateSensorTaskResponse:
+    _require_employee_account(principal)
+
+    assigned_engineer = db.get(Employee, payload.assigned_engineer_id)
+    if not assigned_engineer or not assigned_engineer.is_active:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assigned engineer not found")
+
+    facility_exists = db.execute(
+        text("SELECT facility_id FROM sports_facilities WHERE facility_id = :facility_id"),
+        {"facility_id": payload.facility_id},
+    ).mappings().first()
+    if not facility_exists:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Facility not found")
+
+    if payload.equipment_id is not None:
+        equipment = db.get(Equipment, payload.equipment_id)
+        if not equipment:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Equipment not found")
+        if int(equipment.facility_id) != int(payload.facility_id):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Equipment does not belong to facility")
+
+    if payload.sensor_id is not None:
+        sensor = db.get(Sensor, payload.sensor_id)
+        if not sensor:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sensor not found")
+        if payload.equipment_id is not None and int(sensor.equipment_id) != int(payload.equipment_id):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Sensor does not belong to equipment")
+
+    description = payload.description.strip()
+    if payload.title and payload.title.strip():
+        description = f"{payload.title.strip()}\n{description}"
+
+    context_parts = [f"source=desktop_sensor", f"facility_id={payload.facility_id}"]
+    if payload.equipment_id is not None:
+        context_parts.append(f"equipment_id={payload.equipment_id}")
+    if payload.sensor_id is not None:
+        context_parts.append(f"sensor_id={payload.sensor_id}")
+    context_comment = "; ".join(context_parts)
+
+    base_comment = (payload.operator_comment or "").strip()
+    operator_comment = f"{base_comment}\n{context_comment}" if base_comment else context_comment
+    operator_comment = operator_comment[:4000]
+
+    task_payload = EngineerTaskCreate(
+        facility_id=payload.facility_id,
+        request_id=None,
+        assigned_engineer_id=payload.assigned_engineer_id,
+        description=description,
+        operator_comment=operator_comment,
+    )
+    task, job_id = task_service.create_task_with_background_job(db, task_payload, principal.subject_id)
+    if settings.enable_bff_cache:
+        cache.invalidate(prefix="/bff/")
+
+    return DesktopCreateSensorTaskResponse(
+        task_id=task.task_id,
+        facility_id=task.facility_id,
+        assigned_engineer_id=task.assigned_engineer_id,
+        status=task.status.value if hasattr(task.status, "value") else str(task.status),
+        job_id=job_id,
+        source="desktop_sensor",
     )
