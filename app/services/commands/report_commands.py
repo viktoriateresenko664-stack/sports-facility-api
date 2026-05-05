@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import AuthPrincipal
 from app.core.sanitizer import sanitize_text
+from app.domain.events import ReportGenerationStartedEvent, ReportUploadedEvent
 from app.models.employee import Employee
 from app.models.engineer_report import EngineerReport
 from app.models.engineer_task import EngineerTask
@@ -21,6 +22,7 @@ from app.schemas.engineer_report import (
 )
 from app.services.background_job_service import BackgroundJobService
 from app.services.domain_event_service import DomainEventService
+from app.services.events import event_dispatcher
 from app.services.incident_recovery_service import incident_recovery_service
 from app.services.log_service import LogService
 from app.services.report_service import ReportService
@@ -187,6 +189,14 @@ class ReportCommandService:
                 "source": "uploaded_file",
             },
         )
+        event_dispatcher.dispatch(
+            db,
+            ReportUploadedEvent(
+                aggregate_id=str(report.report_id),
+                user_id=employee.employee_id,
+                data={"task_id": report.task_id},
+            ),
+        )
         logger.info("Report file uploaded: task_id=%s report_id=%s", task.task_id, report.report_id)
         return to_report_file_response(report)
 
@@ -259,6 +269,14 @@ class ReportCommandService:
                     sanitize_text(payload.report_type),
                 ],
                 ignore_result=True,
+            )
+            event_dispatcher.dispatch(
+                db,
+                ReportGenerationStartedEvent(
+                    aggregate_id=str(job.job_id),
+                    user_id=employee.employee_id,
+                    data={"task_id": payload.task_id, "delay_seconds": None},
+                ),
             )
             logger.info("Report job enqueued: job_id=%s", job.job_id)
         except Exception as exc:  # noqa: BLE001
@@ -349,6 +367,17 @@ class ReportCommandService:
                 ],
                 countdown=payload.delay_seconds,
                 ignore_result=True,
+            )
+            event_dispatcher.dispatch(
+                db,
+                ReportGenerationStartedEvent(
+                    aggregate_id=str(job.job_id),
+                    user_id=employee.employee_id,
+                    data={
+                        "task_id": payload.task_id,
+                        "delay_seconds": payload.delay_seconds,
+                    },
+                ),
             )
             logger.info(
                 "Delayed report job enqueued: job_id=%s delay_seconds=%s",

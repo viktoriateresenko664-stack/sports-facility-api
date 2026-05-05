@@ -96,6 +96,7 @@ Read model: BFF DTOs and aggregated query responses optimized for UI.
 ## Security
 - RBAC + ownership checks (IDOR mitigation)
 - Rate limit middleware (`429`)
+- Auth rate limits include `POST /auth/login`, `POST /auth/employee-login`, `POST /auth/register`, `POST /auth/refresh`
 - Security headers middleware
 - CORS from `CORS_ORIGINS` env (no wildcard for release)
 - Dev endpoints disabled by default (`ENABLE_DEV_ENDPOINTS=false`)
@@ -110,6 +111,16 @@ Flow: `command -> domain_event -> queue -> worker`
 - `domain_events` table stores command events.
 - `background_jobs` stores async job status.
 - Worker task `process_domain_event_task` updates domain event processing status.
+- Typed event contracts (`app/domain/events/`):
+  - `request_created`
+  - `request_assigned`
+  - `task_completed`
+  - `report_uploaded`
+  - `report_generation_started`
+  - `report_generated`
+- Dispatcher/subscribers:
+  - `app/services/events/event_dispatcher.py`
+  - `app/services/events/subscribers.py`
 
 ## Cache and Metrics
 - `ENABLE_BFF_CACHE=false` by default (demo stability).
@@ -121,6 +132,9 @@ Flow: `command -> domain_event -> queue -> worker`
   - create request/task, task status transitions, report generation
 - Request metrics middleware logs:
   - method/path/status/latency/user/role/error
+- Queue metrics logs:
+  - `queue_job_id`
+  - `queue_status`
 
 ## Setup
 1. `py -3.11 -m venv .venv`

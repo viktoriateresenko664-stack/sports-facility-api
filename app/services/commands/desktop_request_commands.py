@@ -4,12 +4,14 @@ from fastapi import HTTPException, status
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.domain.events import RequestAssignedEvent
 from app.models.employee import Employee
 from app.models.enums import AccountType, RequestStatus
 from app.models.user_request import UserRequest
 from app.schemas.bff import DesktopAssignEngineerRequest, DesktopAssignEngineerResponse
 from app.schemas.engineer_task import EngineerTaskCreate
 from app.services.engineer_task_service import EngineerTaskService
+from app.services.events import event_dispatcher
 
 
 class DesktopRequestCommandService:
@@ -54,6 +56,18 @@ class DesktopRequestCommandService:
             request_obj.status = RequestStatus.ASSIGNED
             db.add(request_obj)
             db.commit()
+
+        event_dispatcher.dispatch(
+            db,
+            RequestAssignedEvent(
+                aggregate_id=str(request_obj.request_id),
+                user_id=principal_subject_id,
+                data={
+                    "task_id": task.task_id,
+                    "assigned_engineer_id": task.assigned_engineer_id,
+                },
+            ),
+        )
 
         return DesktopAssignEngineerResponse(
             request_id=request_id,

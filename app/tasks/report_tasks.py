@@ -1,10 +1,13 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
+from app.core.metrics import log_queue_metric
 from app.db.session import SessionLocal
+from app.domain.events import ReportGeneratedEvent
 from app.models.engineer_report import EngineerReport
 from app.models.engineer_task import EngineerTask
 from app.models.enums import BackgroundJobStatus, LogStatus
+from app.services.events import event_dispatcher
 from app.tasks.celery_app import celery_app
 
 
@@ -29,6 +32,7 @@ def generate_engineer_report_task(
         job.started_at = datetime.now(UTC)
         db.add(job)
         db.commit()
+        log_queue_metric(queue_job_id=job_id, queue_status=job.status.value, error=None)
 
         report_text = f"Auto-generated report for task #{task_id}."
         if report_type:
@@ -69,6 +73,19 @@ def generate_engineer_report_task(
         )
         db.commit()
 
+        event_dispatcher.dispatch(
+            db,
+            ReportGeneratedEvent(
+                aggregate_id=str(report.report_id),
+                user_id=engineer_id,
+                data={
+                    "task_id": task_id,
+                    "job_id": job_id,
+                },
+            ),
+        )
+        log_queue_metric(queue_job_id=job_id, queue_status=job.status.value, error=None)
+
         return {"job_id": job_id, "status": "SUCCESS", "report_id": report.report_id}
     except Exception as exc:  # noqa: BLE001
         db.rollback()
@@ -93,6 +110,7 @@ def generate_engineer_report_task(
                 )
             )
             db.commit()
+            log_queue_metric(queue_job_id=job_id, queue_status=job.status.value, error=str(exc))
         raise
     finally:
         db.close()

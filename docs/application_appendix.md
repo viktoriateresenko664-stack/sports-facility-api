@@ -64,3 +64,12 @@
 ## API Methods Policy
 - API methods policy: only `GET` and `POST` for current and new HTTP endpoints.
 - No `PATCH`, `PUT`, `DELETE`, `HEAD` API endpoints are used.
+
+## Domain Events (Final)
+- Typed events are declared in `app/domain/events/`.
+- Dispatcher is implemented in `app/services/events/event_dispatcher.py`.
+- Subscribers are implemented in `app/services/events/subscribers.py`.
+- Async flow: `command -> domain event row -> celery queue -> worker -> subscribers`.
+- Eventual consistency is explicit for delayed reports via:
+  - `POST /reports/generate-delayed`
+  - `GET /reports/jobs/{job_id}`

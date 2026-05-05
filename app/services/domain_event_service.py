@@ -2,7 +2,6 @@ from sqlalchemy.orm import Session
 
 from app.models.domain_event import DomainEvent
 from app.models.enums import DomainEventStatus
-from app.tasks.domain_event_tasks import process_domain_event_task
 
 
 class DomainEventService:
@@ -29,4 +28,6 @@ class DomainEventService:
 
     @staticmethod
     def enqueue(event_id: str) -> None:
+        from app.tasks.domain_event_tasks import process_domain_event_task
+
         process_domain_event_task.apply_async(args=[event_id], ignore_result=True)

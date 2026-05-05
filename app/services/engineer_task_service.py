@@ -9,8 +9,10 @@ from app.models.enums import AccountType, LogStatus, RequestStatus, TaskStatus
 from app.models.user_request import UserRequest
 from app.repositories.engineer_task_repository import EngineerTaskRepository
 from app.schemas.engineer_task import EngineerTaskCreate
+from app.domain.events import TaskCompletedEvent
 from app.services.domain_event_service import DomainEventService
 from app.services.background_job_service import BackgroundJobService
+from app.services.events import event_dispatcher
 from app.services.incident_recovery_service import incident_recovery_service
 from app.services.log_service import LogService
 from app.services.task_stream_service import task_stream_service
@@ -175,6 +177,18 @@ class EngineerTaskService:
                     "status": task.status.value,
                     "previous_status": current_status.value,
                 },
+            )
+        if target_status == TaskStatus.COMPLETED:
+            event_dispatcher.dispatch(
+                db,
+                TaskCompletedEvent(
+                    aggregate_id=str(task.task_id),
+                    user_id=task.assigned_engineer_id,
+                    data={
+                        "facility_id": task.facility_id,
+                        "request_id": task.request_id,
+                    },
+                ),
             )
         DomainEventService.enqueue(str(event.event_id))
         cache.invalidate(prefix="/bff/")

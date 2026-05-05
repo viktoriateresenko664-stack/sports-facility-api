@@ -14,8 +14,17 @@ def log_request_metric(
     role: str | None,
     records_count: int | None,
     error: str | None,
+    queue_job_id: str | None = None,
+    queue_status: str | None = None,
 ) -> None:
-    payload: dict[str, Any] = {"user_id": user_id, "role": role, "records_count": records_count, "error": error}
+    payload: dict[str, Any] = {
+        "user_id": user_id,
+        "role": role,
+        "records_count": records_count,
+        "error": error,
+        "queue_job_id": queue_job_id,
+        "queue_status": queue_status,
+    }
     logger.info(
         "request_metrics %s %s -> %s in %.2fms %s",
         method,
@@ -23,4 +32,20 @@ def log_request_metric(
         status_code,
         round(response_time_ms, 2),
         payload,
+    )
+
+
+def log_queue_metric(
+    *,
+    queue_job_id: str,
+    queue_status: str,
+    error: str | None,
+) -> None:
+    logger.info(
+        "queue_metrics %s",
+        {
+            "queue_job_id": queue_job_id,
+            "queue_status": queue_status,
+            "error": error,
+        },
     )

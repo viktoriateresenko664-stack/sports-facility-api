@@ -71,6 +71,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return settings.rate_limit_auth_employee_login_per_minute
         if path == "/auth/register":
             return settings.rate_limit_auth_register_per_minute
+        if path == "/auth/refresh":
+            return settings.rate_limit_auth_login_per_minute
         return settings.rate_limit_default_per_minute
 
     def _cleanup_stale_keys(self, now: float) -> None:
