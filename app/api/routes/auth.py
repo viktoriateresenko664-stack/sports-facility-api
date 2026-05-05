@@ -18,6 +18,7 @@ from app.schemas.auth import (
     UpdateUserProfileRequest,
     UserLoginRequest,
 )
+from app.services.commands.auth_commands import AuthCommandService
 from app.services.auth_service import AuthService
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -108,7 +109,7 @@ def change_password(
     principal: AuthPrincipal = Depends(get_current_principal),
     db: Session = Depends(get_db),
 ) -> ChangePasswordResponse:
-    return AuthService.change_password(db, principal=principal, payload=payload)
+    return AuthCommandService.change_password(db, principal=principal, payload=payload)
 
 
 @router.get(
@@ -144,4 +145,4 @@ def update_me(
     user: User = Depends(get_current_user),
     _=Depends(require_roles("USER")),
 ) -> AuthMeResponse:
-    return AuthService.update_user_profile(db, user=user, payload=payload)
+    return AuthCommandService.update_profile(db, user=user, payload=payload)

@@ -35,7 +35,11 @@ from app.schemas.bff import (
     DesktopRequestItem,
 )
 from app.schemas.engineer_task import EngineerTaskCreate
+from app.services.commands.desktop_request_commands import DesktopRequestCommandService
 from app.services.engineer_task_service import EngineerTaskService
+from app.services.queries.desktop_dashboard_queries import DesktopDashboardQueryService
+from app.services.queries.desktop_reports_queries import DesktopReportsQueryService
+from app.services.queries.desktop_requests_queries import DesktopRequestsQueryService
 from app.services.report_service import ReportService
 
 router = APIRouter(prefix="/bff/desktop", tags=["bff-desktop"])
@@ -174,24 +178,7 @@ def desktop_dashboard(
     principal: AuthPrincipal = Depends(require_roles(*DESKTOP_EMPLOYEE_ROLES)),
 ) -> DesktopDashboardResponse:
     _require_employee_account(principal)
-    rows = db.execute(
-        text(
-            """
-            SELECT
-                facility_id AS id,
-                name,
-                facility_type AS type,
-                address,
-                status::text AS status,
-                latitude,
-                longitude
-            FROM sports_facilities
-            ORDER BY facility_id
-            """
-        )
-    ).mappings().all()
-    facilities = [DesktopFacilityItem.model_validate(dict(row)) for row in rows]
-    return DesktopDashboardResponse(facilities=facilities)
+    return DesktopDashboardQueryService.get_dashboard(db)
 
 
 @router.get(
@@ -217,9 +204,6 @@ def desktop_requests(
     principal: AuthPrincipal = Depends(require_roles(*DESKTOP_EMPLOYEE_ROLES)),
 ) -> list[DesktopRequestItem] | DesktopRequestsPageResponse:
     _require_employee_account(principal)
-    if date_from and date_to and date_from > date_to:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="date_from must be before date_to")
-
     normalized_status = normalize_request_status(status_filter)
     if status_filter is not None and normalized_status is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported status filter")
@@ -235,28 +219,19 @@ def desktop_requests(
         )
     requested_engineer = assigned_engineer_id if assigned_engineer_id is not None else assigned_engineer
 
-    pagination = resolve_pagination(page, limit)
-    scoped_engineer = requested_engineer
-    if _is_desktop_privileged(principal):
-        pass
-    else:
-        if requested_engineer is not None and requested_engineer != employee.employee_id:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Engineer can view only assigned requests")
-        scoped_engineer = employee.employee_id
-
-    items, total = _fetch_desktop_requests(
+    return DesktopRequestsQueryService.get_role_scoped_requests(
         db,
-        assigned_engineer_id=scoped_engineer,
+        principal_account_type=principal.account_type,
+        principal_roles=principal.roles,
+        employee_id=employee.employee_id,
         status_filter=normalized_status,
         facility_id=facility_id,
+        requested_engineer_id=requested_engineer,
         date_from=date_from,
         date_to=date_to,
         page=page,
         limit=limit,
     )
-    if pagination is None:
-        return items
-    return DesktopRequestsPageResponse(items=items, page=pagination.page, limit=pagination.limit, total=total)
 
 
 def _fetch_desktop_requests(
@@ -351,7 +326,7 @@ def desktop_requests_all(
     principal: AuthPrincipal = Depends(require_roles("OPERATOR", "CHIEF_ENGINEER")),
 ) -> list[DesktopRequestItem]:
     _require_employee_account(principal)
-    items, _total = _fetch_desktop_requests(db)
+    items, _total = DesktopRequestsQueryService.fetch_desktop_requests(db)
     return items
 
 
@@ -367,7 +342,7 @@ def desktop_requests_my(
     principal: AuthPrincipal = Depends(require_roles("OPERATOR", "CHIEF_ENGINEER")),
 ) -> list[DesktopRequestItem]:
     _require_employee_account(principal)
-    items, _total = _fetch_desktop_requests(db, assigned_engineer_id=employee.employee_id)
+    items, _total = DesktopRequestsQueryService.fetch_desktop_requests(db, assigned_engineer_id=employee.employee_id)
     return items
 
 
@@ -518,128 +493,29 @@ def desktop_reports(
 ) -> DesktopReportsResponse:
     if principal.account_type != AccountType.EMPLOYEE:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Employee account required")
-
-    if created_from and created_to and created_from > created_to:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="created_from must be before created_to")
-
     if engineer_id is not None and assigned_engineer_id is not None and engineer_id != assigned_engineer_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="engineer_id and assigned_engineer_id must match when both are provided",
         )
     requested_engineer_id = assigned_engineer_id if assigned_engineer_id is not None else engineer_id
-
-    normalized_source = _normalize_reports_source(source)
-    normalized_facility_id = facility_id if facility_id and facility_id > 0 else None
-    normalized_engineer_id = requested_engineer_id if requested_engineer_id and requested_engineer_id > 0 else None
-
-    privileged = _is_desktop_privileged(principal)
-    if not privileged and normalized_engineer_id is not None and normalized_engineer_id != employee.employee_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Engineer can view only own reports")
-    target_engineer_id = normalized_engineer_id if privileged else employee.employee_id
-
-    source_like_pattern = '{"source": "uploaded_file"%'
-    where_clauses: list[str] = []
-    params: dict[str, object] = {}
-
-    if normalized_facility_id is not None:
-        where_clauses.append("et.facility_id = :facility_id")
-        params["facility_id"] = normalized_facility_id
-    if target_engineer_id is not None:
-        where_clauses.append("er.engineer_id = :engineer_id")
-        params["engineer_id"] = target_engineer_id
-    if created_from is not None:
-        where_clauses.append("er.created_at >= :created_from")
-        params["created_from"] = created_from
-    if created_to is not None:
-        where_clauses.append("er.created_at <= :created_to")
-        params["created_to"] = created_to
-    if normalized_source == "uploaded_file":
-        where_clauses.append("er.report_text LIKE :uploaded_pattern")
-        params["uploaded_pattern"] = source_like_pattern
-    if normalized_source == "generated_text":
-        where_clauses.append("(er.report_text IS NULL OR er.report_text NOT LIKE :uploaded_pattern)")
-        params["uploaded_pattern"] = source_like_pattern
-
-    where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
-    key = build_cache_key(
-        path=(
-            "/bff/desktop/reports"
-            f"?facility_id={normalized_facility_id}"
-            f"&engineer_id={target_engineer_id}"
-            f"&source={normalized_source}"
-            f"&created_from={created_from.isoformat() if created_from else ''}"
-            f"&created_to={created_to.isoformat() if created_to else ''}"
-            f"&page={page}"
-            f"&limit={limit}"
-        ),
-        user_id=principal.subject_id,
-        role=(principal.roles[0] if principal.roles else None),
-        account_type=principal.account_type.value,
+    return DesktopReportsQueryService.get_desktop_reports(
+        db,
+        principal_account_type=principal.account_type,
+        principal_roles=principal.roles,
+        principal_subject_id=principal.subject_id,
+        employee_id=employee.employee_id,
+        facility_id=facility_id,
+        requested_engineer_id=requested_engineer_id,
+        source=source,
+        created_from=created_from,
+        created_to=created_to,
+        page=page,
+        limit=limit,
+        normalize_source=_normalize_reports_source,
+        to_desktop_report_item=_to_desktop_report_item,
+        logger=logger,
     )
-    if settings.enable_bff_cache:
-        cached = cache.get(key)
-        if cached:
-            return DesktopReportsResponse.model_validate(cached)
-
-    total_row = db.execute(
-        text(
-            f"""
-            SELECT COUNT(*) AS total
-            FROM engineer_reports er
-            JOIN engineer_tasks et ON et.task_id = er.task_id
-            {where_sql}
-            """
-        ),
-        params,
-    ).mappings().one()
-    total = int(total_row["total"] or 0)
-
-    offset = (page - 1) * limit
-    page_params = dict(params)
-    page_params["limit"] = limit
-    page_params["offset"] = offset
-    rows = db.execute(
-        text(
-            f"""
-            SELECT
-                er.report_id,
-                er.task_id,
-                er.engineer_id,
-                er.report_text,
-                er.created_at,
-                et.facility_id,
-                et.status::text AS task_status,
-                COALESCE(sf.name, '') AS facility_name,
-                COALESCE(TRIM(CONCAT_WS(' ', e.last_name, e.first_name, e.middle_name)), '') AS engineer_name
-            FROM engineer_reports er
-            JOIN engineer_tasks et ON et.task_id = er.task_id
-            LEFT JOIN sports_facilities sf ON sf.facility_id = et.facility_id
-            LEFT JOIN employees e ON e.employee_id = er.engineer_id
-            {where_sql}
-            ORDER BY er.created_at DESC
-            LIMIT :limit OFFSET :offset
-            """
-        ),
-        page_params,
-    ).mappings().all()
-
-    items = [_to_desktop_report_item(dict(row)) for row in rows]
-    response = DesktopReportsResponse(total=total, page=page, limit=limit, items=items)
-    logger.info(
-        "Desktop reports loaded: employee_id=%s roles=%s total=%s facility_id=%s engineer_id=%s source=%s page=%s limit=%s",
-        employee.employee_id,
-        principal.roles,
-        total,
-        normalized_facility_id,
-        target_engineer_id,
-        normalized_source,
-        page,
-        limit,
-    )
-    if settings.enable_bff_cache:
-        cache.set(key, response.model_dump(), ttl_seconds=20)
-    return response
 
 
 @router.get(
@@ -746,47 +622,17 @@ def desktop_assign_engineer(
     principal: AuthPrincipal = Depends(get_current_principal),
     _=Depends(require_roles("OPERATOR", "CHIEF_ENGINEER")),
 ) -> DesktopAssignEngineerResponse:
-    if principal.account_type != AccountType.EMPLOYEE:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Employee account required")
-
-    request_obj = db.get(UserRequest, request_id)
-    if not request_obj:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Request not found")
-
-    engineer = db.get(Employee, payload.assigned_engineer_id)
-    if not engineer or not engineer.is_active:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assigned engineer not found")
-
-    existing = db.execute(
-        text("SELECT task_id FROM engineer_tasks WHERE request_id = :request_id"),
-        {"request_id": request_id},
-    ).mappings().first()
-    if existing:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Task already exists for this request")
-
-    task_payload = EngineerTaskCreate(
-        facility_id=request_obj.facility_id,
-        request_id=request_obj.request_id,
-        assigned_engineer_id=payload.assigned_engineer_id,
-        description=request_obj.description,
-        operator_comment=payload.operator_comment,
+    response = DesktopRequestCommandService.assign_request(
+        db,
+        principal_account_type=principal.account_type,
+        principal_subject_id=principal.subject_id,
+        request_id=request_id,
+        payload=payload,
+        task_service=task_service,
     )
-    task, job_id = task_service.create_task_with_background_job(db, task_payload, principal.subject_id)
-
-    if request_obj.status == RequestStatus.CREATED:
-        request_obj.status = RequestStatus.ASSIGNED
-        db.add(request_obj)
-        db.commit()
     if settings.enable_bff_cache:
         cache.invalidate(prefix="/bff/")
-
-    return DesktopAssignEngineerResponse(
-        request_id=request_id,
-        task_id=task.task_id,
-        assigned_engineer_id=task.assigned_engineer_id,
-        job_id=job_id,
-        status=task.status.value if hasattr(task.status, "value") else str(task.status),
-    )
+    return response
 
 
 @router.post(

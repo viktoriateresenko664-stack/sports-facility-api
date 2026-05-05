@@ -5,6 +5,7 @@ from app.api.deps import get_current_user, require_roles
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.user_request import UserRequestCreate, UserRequestResponse
+from app.services.commands.user_request_commands import UserRequestCommandService
 from app.services.user_request_service import UserRequestService
 
 router = APIRouter(prefix="/user-requests", tags=["user-requests"])
@@ -30,8 +31,7 @@ def create_user_request(
     user: User = Depends(get_current_user),
     _=Depends(require_roles("USER")),
 ) -> UserRequestResponse:
-    request_obj = UserRequestService.create_request(db, user, payload)
-    return UserRequestResponse.model_validate(request_obj)
+    return UserRequestCommandService.create_request(db, user=user, payload=payload)
 
 
 @router.get(

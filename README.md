@@ -61,6 +61,21 @@ FastAPI backend for web/mobile/desktop clients with a single API source of truth
 Write model: normalized ORM tables (`user_requests`, `engineer_tasks`, `background_jobs`, `domain_events`).
 Read model: BFF DTOs and aggregated query responses optimized for UI.
 
+## Where CQRS is implemented
+- Command services: `app/services/commands/`
+  - `auth_commands.py` (`change_password`, `update_profile`)
+  - `user_request_commands.py` (`create_request`)
+  - `desktop_request_commands.py` (`assign_request`)
+  - `report_commands.py` (`upload_report_file`, `generate_report`, `generate_report_delayed`)
+- Query services: `app/services/queries/`
+  - `web_dashboard_queries.py`
+  - `mobile_tasks_queries.py`
+  - `desktop_dashboard_queries.py`
+  - `desktop_requests_queries.py`
+  - `desktop_reports_queries.py`
+  - `report_job_queries.py`
+- Routers call command/query services and keep URL + request/response contracts unchanged.
+
 ## Lifecycle
 - Request statuses: `CREATED`, `ACTIVE`, `ASSIGNED`, `IN_WORK`, `COMPLETED`, `CANCELLED`
 - Task statuses: `CREATED`, `ACTIVE`, `COMPLETED`, `CANCELLED`
