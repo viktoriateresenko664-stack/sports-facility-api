@@ -99,6 +99,11 @@ Flow: `command -> domain_event -> queue -> worker`
 4. `alembic upgrade head`
 5. `uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload`
 
+## Tests
+1. `.\.venv\Scripts\Activate.ps1`
+2. `pip install pytest`
+3. `pytest -q`
+
 ## Render deployment (production)
 - Build command: `pip install -r requirements.txt`
 - Start command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
