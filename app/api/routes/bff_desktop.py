@@ -835,7 +835,7 @@ def desktop_create_task_from_sensor(
     if payload.title and payload.title.strip():
         description = f"{payload.title.strip()}\n{description}"
 
-    context_parts = [f"source=desktop_sensor", f"facility_id={payload.facility_id}"]
+    context_parts: list[str] = []
     if payload.equipment_id is not None:
         context_parts.append(f"equipment_id={payload.equipment_id}")
     if payload.sensor_id is not None:
@@ -843,7 +843,12 @@ def desktop_create_task_from_sensor(
     context_comment = "; ".join(context_parts)
 
     base_comment = (payload.operator_comment or "").strip()
-    operator_comment = f"{base_comment}\n{context_comment}" if base_comment else context_comment
+    if base_comment and context_comment:
+        operator_comment = f"{base_comment}\n{context_comment}"
+    elif base_comment:
+        operator_comment = base_comment
+    else:
+        operator_comment = context_comment
     operator_comment = operator_comment[:4000]
 
     task_payload = EngineerTaskCreate(
