@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Личный кабинет</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app">
+        <aside class="sidebar">
+            <div class="logo">Спортивные объекты <span>Москвы</span></div>
+            <nav>
+                <a href="index.html" class="nav-item">
+                    <img src="/images/domik.png" alt="Главная" class="nav-icon">
+                    <span>Главная</span>
+                </a>
+                <a href="profile.html" class="nav-item">
+                    <img src="/images/golova.png" alt="Личный кабинет" class="nav-icon">
+                    <span>Личный кабинет</span>
+                </a>
+            </nav>
+            <div class="sidebar-footer">
+                <button id="logoutBtn" class="btn-logout">
+                    <img src="/images/exit.png" alt="Выход" class="nav-icon">
+                    <span>Выход</span>
+                </button>
+            </div>
+        </aside>
+        <main class="main-content">
+            <header class="header">
+                <h1>Спортивные объекты <span class="highlight">Москвы</span></h1>
+                <div class="user-info" id="userInfo"></div>
+            </header>
+            <div class="content profile-page">
+                <div class="profile-sections">
+                    <div class="profile-card">
+                        <h3>Персональные данные</h3>
+                        <form id="profileForm">
+                            <div class="form-row">
+                                <label>Имя пользователя</label>
+                                <input type="text" id="profileUsername" readonly>
+                            </div>
+                            <div class="form-row">
+                                <label>Email</label>
+                                <input type="email" id="profileEmail" readonly>
+                            </div>
+                            <div class="form-row">
+                                <label>Телефон</label>
+                                <input type="tel" id="profilePhone" placeholder="+7 (999) 123-45-67">
+                            </div>
+                            <button type="submit" class="btn-save">Сохранить изменения</button>
+                        </form>
+                        <div id="profileMessage"></div>
+                    </div>
+
+                    <div class="profile-card">
+                        <h3>Изменить пароль</h3>
+                        <form id="passwordForm">
+                            <div class="form-row">
+                                <label>Текущий пароль</label>
+                                <input type="password" id="currentPassword" required>
+                            </div>
+                            <div class="form-row">
+                                <label>Новый пароль</label>
+                                <input type="password" id="newPassword" required>
+                                <small>Минимум 6 символов</small>
+                            </div>
+                            <div class="form-row">
+                                <label>Подтвердите новый пароль</label>
+                                <input type="password" id="confirmNewPassword" required>
+                            </div>
+                            <button type="submit" class="btn-save">Изменить пароль</button>
+                        </form>
+                        <div id="passwordMessage"></div>
+                    </div>
+
+                </div>
+
+                <div class="requests-section">
+                    <h3>Мои заявки</h3>
+                    <table class="requests-table" id="requestsTable">
+                        <thead>
+                            <tr>
+                                <th>№</th>
+                                <th>ОБЪЕКТ</th>
+                                <th>ОПИСАНИЕ</th>
+                                <th>ДАТА</th>
+                                <th>СТАТУС</th>
+                            </tr>
+                        </thead>
+                        <tbody id="requestsBody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+    <script src="/config.js"></script>
+    <script src="app.js"></script>
+    <script>
+
+        if (!localStorage.getItem('token')) {
+            window.location.href = 'login.html';
+        }
+    document.addEventListener('DOMContentLoaded', () => {
+        if (typeof loadProfile === 'function') {
+        loadProfile();
+        }
+
+        const profileForm = document.getElementById('profileForm');
+        if (profileForm) {
+        profileForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const phone = document.getElementById('profilePhone')?.value || '';
+            await updateProfile(phone);
+        });
+        }
+
+        const passwordForm = document.getElementById('passwordForm');
+        if (passwordForm) {
+        passwordForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const currentPassword = document.getElementById('currentPassword')?.value || '';
+            const newPassword = document.getElementById('newPassword')?.value || '';
+            const confirmPassword = document.getElementById('confirmNewPassword')?.value || '';
+            
+            if (typeof changePassword === 'function') {
+            await changePassword(currentPassword, newPassword, confirmPassword);
+            } else {
+            showToast('Функция смены пароля не найдена', 'error');
+            }
+        });
+        }
+    });
+    </script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Вход в аккаунт</title>
+    <link rel="stylesheet" href="auth.css">
+</head>
+<body class="auth-page">
+    <div class="auth-container">
+        <div class="auth-card">
+            <h2>Вход в аккаунт</h2>
+            <form id="loginForm">
+                <div class="input-group">
+                    <input type="text" id="email" placeholder="E-mail" required>
+                </div>
+                <div class="input-group">
+                    <input type="password" id="password" placeholder="Пароль" required>
+                </div>
+                <button type="submit" class="btn-primary">Войти</button>
+                <p class="auth-link">Нет аккаунта? <a href="register.html">Зарегистрироваться</a></p>
+            </form>
+        </div>
+    </div>
+    <script src="/config.js"></script>
+    <script src="app.js"></script>
+    <script src="auth.js"></script>
+</body>
+</html>

@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Сообщить о проблеме</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app">
+        <aside class="sidebar">
+            <div class="logo">Спортивные объекты <span>Москвы</span></div>
+            <nav>
+                <a href="index.html" class="nav-item">
+                    <img src="/images/domik.png" alt="Главная" class="nav-icon">
+                    <span>Главная</span>
+                </a>
+                <a href="profile.html" class="nav-item">
+                    <img src="/images/golova.png" alt="Личный кабинет" class="nav-icon">
+                    <span>Личный кабинет</span>
+                </a>
+            </nav>
+            <div class="sidebar-footer">
+                <button id="logoutBtn" class="btn-logout">
+                    <img src="/images/exit.png" alt="Выход" class="nav-icon">
+                    <span>Выход</span>
+                </button>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <header class="header">
+                <h1>Спортивные объекты <span class="highlight">Москвы</span></h1>
+            </header>
+            
+            <div class="content request-page">
+                <div class="breadcrumb">
+                    <a href="index.html">Главная</a> &gt; 
+                    <a href="facility.html" id="backToFacility">Объект</a> &gt; 
+                    <span>Сообщить о проблеме</span>
+                </div>
+                
+                <h2>Сообщить о проблеме</h2>
+                <p class="subtitle">Заполните форму, чтобы отправить заявку на устранение неисправности</p>
+                
+                <div class="facility-info">
+                    <img src="/images/domik2.png" alt="Объект" class="facility-icon-img">
+                    <div>
+                        <strong id="reqFacilityName">Название объекта</strong>
+                        <p id="reqFacilityAddress">Адрес</p>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>Описание проблемы</label>
+                    <textarea id="problemDesc" placeholder="Опишите проблему подробно..." maxlength="500" style="min-height: 180px;"></textarea>
+                    <div class="char-count"><span id="charCount">0</span>/500</div>
+                </div>
+                
+                <div class="info-box">
+                    <img src="/images/error.png" alt="Информация" class="info-icon-img">
+                    <p>После отправки заявка появится в вашем личном кабинете, где вы можете отслеживать её статус.</p>
+                </div>
+                
+                <button type="submit" class="btn-problem">Отправить заявку</button>
+            </div>
+        </main>
+    </div>
+
+    <script src="/config.js"></script>
+    <script src="app.js"></script>
+    <script>
+
+        if (!localStorage.getItem('token')) {
+            window.location.href = 'login.html';
+        }
+        
+        document.addEventListener('DOMContentLoaded', () => {
+
+            const facilityName = localStorage.getItem('selectedFacilityName') || 'Объект';
+            const facilityAddress = localStorage.getItem('selectedFacilityAddress') || '';
+            
+            document.getElementById('reqFacilityName').textContent = facilityName;
+            document.getElementById('reqFacilityAddress').textContent = facilityAddress;
+            document.getElementById('backToFacility').textContent = facilityName;
+
+            const textarea = document.getElementById('problemDesc');
+            const counter = document.getElementById('charCount');
+            if (textarea && counter) {
+                textarea.addEventListener('input', () => {
+                    counter.textContent = textarea.value.length;
+                });
+            }
+
+            const submitBtn = document.querySelector('.btn-problem');
+            if (submitBtn) {
+                submitBtn.addEventListener('click', submitForm);
+            }
+        });
+
+        function submitForm() {
+            const desc = document.getElementById('problemDesc').value;
+            
+            if (!desc.trim()) {
+                alert('Опишите проблему!');
+                return;
+            }
+            
+            submitRequest('', desc);
+        }
+    </script>
+</body>
+</html>

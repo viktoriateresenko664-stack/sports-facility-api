@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Регистрация</title>
+    <link rel="stylesheet" href="auth.css">
+</head>
+<body class="auth-page">
+    <div class="auth-container">
+        <div class="auth-card">
+            <h2>Регистрация</h2>
+            <p class="subtitle">Создайте аккаунт и отправляйте заявки</p>
+            <form id="registerForm">
+                <div class="input-group">
+                    <input type="text" id="username" placeholder="Имя пользователя" required>
+                </div>
+                <div class="input-group">
+                    <input type="email" id="email" placeholder="Email" required>
+                </div>
+                <div class="input-group">
+                    <input type="tel" id="phone" placeholder="Телефон">
+                </div>
+                <div class="input-group">
+                    <input type="password" id="password" placeholder="Пароль" required>
+                </div>
+                <div class="input-group">
+                    <input type="password" id="confirmPassword" placeholder="Подтвердите пароль" required>
+                </div>
+                <button type="submit" class="btn-primary">Зарегистрироваться</button>
+            </form>
+        </div>
+    </div>
+    <script src="/config.js"></script>
+    <script src="app.js"></script>
+    <script src="auth.js"></script>
+</body>
+</html>
