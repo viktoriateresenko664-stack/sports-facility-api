@@ -39,7 +39,7 @@ class Settings(BaseSettings):
         "http://localhost:19006",
         "http://127.0.0.1:19006",
     ]
-    cors_allow_origin_regex: str = r"https://.*\.ngrok(-free)?\.(app|dev)"
+    cors_allow_origin_regex: str | None = None
     reports_storage_dir: str = "storage/reports"
     report_template_filename: str = "engineer_report_template.txt"
     report_upload_max_size_bytes: int = 10 * 1024 * 1024
