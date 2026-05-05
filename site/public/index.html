@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Спортивные объекты Москвы</title>
+    <link rel="stylesheet" href="styles.css">
+    <link
+        rel="stylesheet"
+        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+        crossorigin=""
+    />
+    <script
+        src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+        crossorigin=""
+    ></script>
+</head>
+<body>
+    <div class="app">
+        <aside class="sidebar">
+            <div class="logo">Спортивные объекты <span>Москвы</span></div>
+            <nav>
+                <a href="index.html" class="nav-item">
+                    <img src="/images/domik.png" alt="Главная" class="nav-icon">
+                    <span>Главная</span>
+                </a>
+                <a href="profile.html" class="nav-item">
+                    <img src="/images/golova.png" alt="Личный кабинет" class="nav-icon">
+                    <span>Личный кабинет</span>
+                </a>
+            </nav>
+            <div class="sidebar-footer">
+                <button id="logoutBtn" class="btn-logout">
+                    <img src="/images/exit.png" alt="Выход" class="nav-icon">
+                    <span>Выход</span>
+                </button>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <header class="header">
+                <h1>Спортивные объекты <span class="highlight">Москвы</span></h1>
+                <div class="user-info" id="userInfo">
+                    <button class="btn-login" onclick="location.href='login.html'">Войти</button>
+                </div>
+            </header>
+
+            <div class="content">
+                <div class="facilities-list" id="facilitiesList">
+                </div>
+
+                <div class="map-container" id="map"></div>
+            </div>
+        </main>
+    </div>
+
+    <div class="modal" id="facilityModal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <div id="modalBody"></div>
+        </div>
+    </div>
+
+    <script src="/config.js"></script>
+    <script src="app.js" type="module"></script>
+    <script src="map.js" type="module"></script>
+    <script>
+        if (!localStorage.getItem('token')) {
+            window.location.href = 'login.html';
+        }
+    </script>
+
+</body>
+</html>

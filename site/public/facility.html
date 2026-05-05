@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Карточка объекта</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app">
+        <aside class="sidebar">
+            <div class="logo">Спортивные объекты <span>Москвы</span></div>
+            <nav>
+                <a href="index.html" class="nav-item">
+                    <img src="/images/domik.png" alt="Главная" class="nav-icon">
+                    <span>Главная</span>
+                </a>
+                <a href="profile.html" class="nav-item">
+                    <img src="/images/golova.png" alt="Личный кабинет" class="nav-icon">
+                    <span>Личный кабинет</span>
+                </a>
+            </nav>
+            <div class="sidebar-footer">
+                <button id="logoutBtn" class="btn-logout">
+                    <img src="/images/exit.png" alt="Выход" class="nav-icon">
+                    <span>Выход</span>
+                </button>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <header class="header">
+                <h1>Спортивные объекты <span class="highlight">Москвы</span></h1>
+                <div class="user-info" id="userInfo"></div>
+            </header>
+            
+            <div class="content facility-detail">
+                <div class="breadcrumb">
+                    <a href="index.html">Главная</a> &gt; <span id="facilityName">Объект</span>
+                </div>
+                
+                <div class="facility-card">
+                    <div class="facility-image">
+                        <img src="https://via.placeholder.com/600x300/0d2b4e/ffffff?text=Спортивный+объект" alt="Фото объекта">
+                    </div>
+                    <div class="facility-info-side">
+                        <div class="info-block">
+                            <img src="/images/Vector.png" alt="Адрес" class="info-icon-img">
+                            <div>
+                                <strong>Адрес:</strong>
+                                <p id="facilityAddress">Адрес объекта</p>
+                            </div>
+                        </div>
+                        <div class="info-block">
+                            <div>
+                                <strong>Режим работы:</strong>
+                                <p id="facilityHours">Пн-Вс 07:00–23:00</p>
+                            </div>
+                        </div>
+                        <a href="request.html" class="btn-problem">Сообщить о проблеме</a>
+                    </div>
+                </div>
+                
+                <div class="facility-description">
+                    <h3>Описание</h3>
+                    <p id="facilityDesc">Загрузка...</p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="/config.js"></script>
+    <script src="app.js"></script>
+    <script>
+        if (!localStorage.getItem('token')) {
+            window.location.href = 'login.html';
+        }
+        document.addEventListener('DOMContentLoaded', async () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            let facilityId = urlParams.get('id');
+            let facilityName = urlParams.get('name');
+            let facilityAddress = urlParams.get('address');
+            let facilityImage = urlParams.get('image');
+            if (typeof safeImageUrl === 'function') {
+                facilityImage = safeImageUrl(facilityImage || '');
+            }
+
+            if (!facilityId) {
+                facilityId = localStorage.getItem('selectedFacilityId');
+                facilityName = localStorage.getItem('selectedFacilityName');
+                facilityAddress = localStorage.getItem('selectedFacilityAddress');
+                facilityImage = localStorage.getItem('selectedFacilityImage');
+                if (typeof safeImageUrl === 'function') {
+                    facilityImage = safeImageUrl(facilityImage || '');
+                }
+                
+            }
+
+            if (!facilityId) {
+                document.querySelector('.facility-detail').innerHTML = 
+                    '<div class="error-msg"> Объект не выбран. <a href="index.html">Вернуться на главную</a></div>';
+                return;
+            }
+
+            if (facilityImage) {
+                localStorage.setItem('selectedFacilityImage', facilityImage);
+            } else {
+                facilityImage = localStorage.getItem('selectedFacilityImage');
+                if (typeof safeImageUrl === 'function') {
+                    facilityImage = safeImageUrl(facilityImage || '');
+                }
+            }
+
+            const titleElement = document.getElementById('facilityName');
+            const addressElement = document.getElementById('facilityAddress');
+            const hoursElement = document.getElementById('facilityHours');
+            const imgElement = document.querySelector('.facility-image img');
+
+            if (titleElement && facilityName) titleElement.textContent = decodeURIComponent(facilityName);
+            if (addressElement && facilityAddress) addressElement.textContent = decodeURIComponent(facilityAddress);
+            if (hoursElement) hoursElement.textContent = 'Пн-Вс 07:00–23:00';
+
+            if (imgElement) {
+                if (facilityImage && facilityImage.trim()) {
+                    imgElement.src = facilityImage;
+                    imgElement.onerror = () => {
+                        imgElement.src = 'https://via.placeholder.com/600x300/0d2b4e/ffffff?text=Фото+отсутствует';
+                    };
+                } else {
+                    imgElement.src = 'https://via.placeholder.com/600x300/0d2b4e/ffffff?text=Фото+отсутствует';
+                }
+            }
+
+            if (typeof getFacilityById === 'function') {
+                const facility = await getFacilityById(facilityId);
+                const descElement = document.getElementById('facilityDesc');
+                if (descElement && facility) {
+                    descElement.textContent = facility.description && facility.description.trim()
+                        ? facility.description
+                        : 'Описание отсутствует';
+                }
+            }
+        });
+    </script>
+</body>
+</html>

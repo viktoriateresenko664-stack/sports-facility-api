@@ -105,6 +105,8 @@ Read model: BFF DTOs and aggregated query responses optimized for UI.
 - Mass-assignment prevention: owner ids from JWT only
 - XSS sanitation: user text fields sanitized with `bleach.clean`
 - Access-log sanitization: query tokens in URL are redacted/stripped in logs
+- Site frontend note: access/refresh tokens are currently stored in `localStorage` for backward compatibility; CSP + output escaping are enabled, but HttpOnly cookie migration is recommended for stricter production security
+- Site frontend note: Leaflet CDN includes SRI (`integrity`) and `crossorigin` attributes in `site/public/index.html`
 
 ## Queue and Domain Events
 Flow: `command -> domain_event -> queue -> worker`
