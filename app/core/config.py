@@ -31,7 +31,8 @@ class Settings(BaseSettings):
     login_bruteforce_max_attempts: int = 5
     login_bruteforce_block_seconds: int = 600
     enable_dev_endpoints: bool = False
-    cors_origins: list[str] = [
+    allow_localhost_origins_in_production: bool = False
+    cors_origins: list[str] | str = [
         "http://localhost:3000",
         "http://localhost:5173",
         "http://localhost:8081",
@@ -69,17 +70,24 @@ class Settings(BaseSettings):
 
     @field_validator("cors_origins", mode="before")
     @classmethod
-    def parse_cors_origins(cls, value: str | list[str]) -> list[str]:
+    def parse_cors_origins(cls, value: str | list[str] | tuple[str, ...]) -> list[str]:
         if isinstance(value, str):
             cleaned = value.strip()
             if not cleaned:
                 return []
             if cleaned.startswith("[") and cleaned.endswith("]"):
                 import json
-
-                return json.loads(cleaned)
+                try:
+                    parsed = json.loads(cleaned)
+                except json.JSONDecodeError as exc:
+                    raise ValueError("CORS_ORIGINS JSON format is invalid") from exc
+                if not isinstance(parsed, list):
+                    raise ValueError("CORS_ORIGINS JSON value must be a list")
+                return [str(item).strip() for item in parsed if str(item).strip()]
             return [item.strip() for item in cleaned.split(",") if item.strip()]
-        return value
+        if isinstance(value, tuple):
+            return [str(item).strip() for item in value if str(item).strip()]
+        return [str(item).strip() for item in value if str(item).strip()]
 
     @field_validator("debug", mode="before")
     @classmethod
@@ -159,7 +167,10 @@ class Settings(BaseSettings):
                 raise ValueError("CORS_ORIGINS must include explicit frontend domains in production")
             if any(origin.strip() == "*" for origin in self.cors_origins):
                 raise ValueError("Wildcard CORS origin '*' is forbidden in production")
-            if any("localhost" in origin.lower() or "127.0.0.1" in origin for origin in self.cors_origins):
+            if (
+                not self.allow_localhost_origins_in_production
+                and any("localhost" in origin.lower() or "127.0.0.1" in origin for origin in self.cors_origins)
+            ):
                 raise ValueError("Localhost origins are forbidden in production")
             if self.cors_allow_origin_regex:
                 raise ValueError("CORS_ALLOW_ORIGIN_REGEX must be empty in production")
