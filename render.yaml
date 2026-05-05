@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: sports-facilities-api
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    autoDeploy: true
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: ENABLE_DEV_ENDPOINTS
+        value: "false"
+      - key: CORS_ALLOW_ORIGIN_REGEX
+        value: ""
+      - key: ENABLE_REQUEST_METRICS
+        value: "true"

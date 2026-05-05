@@ -1,0 +1,10 @@
+storage/reports/
+.env
+.env.*
+!.env.example
+.venv/
+.expo/
+.npm-cache/
+__pycache__/
+*.pyc
+desktop.ini

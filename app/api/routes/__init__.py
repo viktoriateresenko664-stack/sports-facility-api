@@ -1,0 +1,31 @@
+from app.api.routes import (
+    auth,
+    bff_desktop,
+    bff_mobile,
+    bff_web,
+    facilities,
+    dev,
+    engineer_tasks,
+    jobs,
+    reports,
+    sensors,
+    user_requests,
+    ws_sensors,
+    ws_tasks,
+)
+
+__all__ = [
+    "auth",
+    "bff_desktop",
+    "bff_mobile",
+    "bff_web",
+    "facilities",
+    "dev",
+    "engineer_tasks",
+    "jobs",
+    "reports",
+    "sensors",
+    "user_requests",
+    "ws_sensors",
+    "ws_tasks",
+]
