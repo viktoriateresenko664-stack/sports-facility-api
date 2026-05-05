@@ -11,7 +11,15 @@ print("DATABASE_URL_SET=", bool(os.getenv("DATABASE_URL")), flush=True)
 print("SECRET_KEY_SET=", bool(os.getenv("SECRET_KEY")), flush=True)
 
 try:
-    print("IMPORTING_APP_MAIN", flush=True)
+    print("IMPORT_CONFIG", flush=True)
+    from app.core.config import settings
+    print("CONFIG_OK", flush=True)
+
+    print("IMPORT_ROUTER", flush=True)
+    from app.api.router import router
+    print("ROUTER_OK", flush=True)
+
+    print("IMPORT_MAIN", flush=True)
     from app.main import app
     print("IMPORT_OK", flush=True)
 except BaseException as e:
