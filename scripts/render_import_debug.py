@@ -11,9 +11,10 @@ print("DATABASE_URL_SET=", bool(os.getenv("DATABASE_URL")), flush=True)
 print("SECRET_KEY_SET=", bool(os.getenv("SECRET_KEY")), flush=True)
 
 try:
+    print("IMPORTING_APP_MAIN", flush=True)
     from app.main import app
     print("IMPORT_OK", flush=True)
-except Exception:
-    print("IMPORT_FAILED", flush=True)
+except BaseException as e:
+    print("IMPORT_FAILED", type(e).__name__, str(e), flush=True)
     traceback.print_exc()
     raise
