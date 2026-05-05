@@ -2,6 +2,14 @@
 
 FastAPI backend for web/mobile/desktop clients with a single API source of truth.
 
+## CI
+- GitHub Actions workflow: `.github/workflows/ci.yml`
+- Triggers: `push`, `pull_request`
+- Checks:
+  - dependencies install
+  - `python -m compileall app tests`
+  - `pytest`
+
 ## Defense Documents
 - Full product manual (non-code): `docs/readme_manual.md`
 - Test plan: `docs/test_plan.md`
