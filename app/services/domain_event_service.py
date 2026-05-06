@@ -1,7 +1,11 @@
+import logging
+
 from sqlalchemy.orm import Session
 
 from app.models.domain_event import DomainEvent
 from app.models.enums import DomainEventStatus
+
+logger = logging.getLogger(__name__)
 
 
 class DomainEventService:
@@ -28,6 +32,10 @@ class DomainEventService:
 
     @staticmethod
     def enqueue(event_id: str) -> None:
-        from app.tasks.domain_event_tasks import process_domain_event_task
+        try:
+            from app.tasks.domain_event_tasks import process_domain_event_task
 
-        process_domain_event_task.apply_async(args=[event_id], ignore_result=True)
+            process_domain_event_task.apply_async(args=[event_id], ignore_result=True)
+        except Exception:  # noqa: BLE001
+            # Best-effort delivery: API flow must not fail when Redis/worker is unavailable.
+            logger.exception("Event enqueue failed, fallback to no-op")

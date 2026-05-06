@@ -1,225 +1,127 @@
-# Sports Facilities Monitoring API
+﻿# Sports Facilities Monitoring
 
-FastAPI backend for web/mobile/desktop clients with a single API source of truth.
+Монорепозиторий финальной версии проекта для защиты.
 
-## CI
-- GitHub Actions workflow: `.github/workflows/ci.yml`
-- Triggers: `push`, `pull_request`
-- Checks:
-  - dependencies install
-  - `python -m compileall app tests`
-  - `pytest`
+## 1. Architecture Overview
+- **Backend API**: FastAPI (`app/`) — единый источник данных для всех клиентов.
+- **Web Site**: `site/` — Node.js BFF + static frontend (роль `USER`).
+- **Mobile**: `EngineerMobile финал/EngineerMobile` — Expo app (роль `ENGINEER`).
+- **Desktop**: `desctop11/desctop11/desctop` — PySide6 desktop client (роли `OPERATOR`, `CHIEF_ENGINEER`).
+- **Database**: Supabase PostgreSQL.
+- **Queue**: Celery + Redis/Valkey (best-effort; API не должен падать при недоступной очереди).
 
-## Defense Documents
-- Full product manual (non-code): `docs/readme_manual.md`
-- Test plan: `docs/test_plan.md`
-- SAD: `docs/sad.md`
-- Risk register: `docs/risk_register.md`
-- Presentation outline: `docs/presentation_outline.md`
+## 2. Production URLs
+- Backend API: `https://sports-facility-api.onrender.com`
+- Frontend site: `https://site-zw5j.onrender.com`
+- Mobile distribution: APK через EAS build
+- Desktop: локальный запуск (или локальная сборка exe)
 
-## Architecture
-- FastAPI + SQLAlchemy 2.0 + Alembic
-- Supabase PostgreSQL
-- JWT auth (access 15m, refresh 7d)
-- Celery + Redis + Flower
-- CQRS-style split: command endpoints and query/BFF endpoints
-- Main lifecycle entity: `engineer_tasks`
+## 3. Roles
+- `USER` -> web site
+- `ENGINEER` -> mobile
+- `OPERATOR`, `CHIEF_ENGINEER` -> desktop
 
-## API split (CQRS)
-- Command endpoints (write):
-  - `POST /auth/me`
-  - `POST /user-requests`
-  - `POST /engineer-tasks`
-  - `POST /engineer-tasks/{task_id}/start`
-  - `POST /engineer-tasks/{task_id}/finish`
-  - `POST /engineer-tasks/{task_id}/cancel`
-  - `POST /bff/desktop/requests/{request_id}/assign`
-  - `POST /reports/generate`
-  - `POST /reports/generate-delayed`
-  - `POST /reports/upload`
-  - `POST /reports/seed-samples`
-- Query endpoints (read):
-  - `GET /user-requests/my`
-  - `GET /engineer-tasks`
-  - `GET /engineer-tasks/raw` (raw SQL + bind params)
-  - `GET /bff/web/dashboard`
-  - `GET /bff/web/facilities-map`
-  - `GET /bff/web/user-requests/my`
-  - `GET /bff/mobile/tasks`
-  - `GET /bff/desktop/monitoring`
-  - `GET /bff/desktop/requests` (role-scoped)
-  - `GET /bff/desktop/reports`
-  - `GET /bff/desktop/reports/{report_id}`
-  - `GET /bff/desktop/requests/all`
-  - `GET /bff/desktop/requests/my` (engineer-only)
-  - `GET /reports/template`
-  - `GET /reports/my`
-  - `GET /reports/jobs/{job_id}`
-  - `GET /reports/{report_id}/download`
-  - `GET /reports/{report_id}/preview`
+## 4. API Policy
+- Для текущего API используется только `GET` и `POST`.
+- JWT Bearer auth.
+- RBAC + ownership проверки обязательны.
+- Все API-поля — `snake_case`.
+- API-контракт сохранен backward-compatible.
 
-Write model: normalized ORM tables (`user_requests`, `engineer_tasks`, `background_jobs`, `domain_events`).
-Read model: BFF DTOs and aggregated query responses optimized for UI.
-
-## Where CQRS is implemented
-- Command services: `app/services/commands/`
-  - `auth_commands.py` (`change_password`, `update_profile`)
-  - `user_request_commands.py` (`create_request`)
-  - `desktop_request_commands.py` (`assign_request`)
-  - `report_commands.py` (`upload_report_file`, `generate_report`, `generate_report_delayed`)
-- Query services: `app/services/queries/`
-  - `web_dashboard_queries.py`
-  - `mobile_tasks_queries.py`
-  - `desktop_dashboard_queries.py`
-  - `desktop_requests_queries.py`
-  - `desktop_reports_queries.py`
-  - `report_job_queries.py`
-- Routers call command/query services and keep URL + request/response contracts unchanged.
-
-## Lifecycle
-- Request statuses: `CREATED`, `ACTIVE`, `ASSIGNED`, `IN_WORK`, `COMPLETED`, `CANCELLED`
-- Task statuses: `CREATED`, `ACTIVE`, `COMPLETED`, `CANCELLED`
-- Allowed transitions:
-  - `CREATED -> ACTIVE`
-  - `ACTIVE -> COMPLETED`
-  - `ACTIVE -> CANCELLED`
-- Invalid transitions return `409`.
-- Missing task returns `404`.
-- Task status syncs linked `user_requests.status`.
-
-## BFF
-- Web: `/bff/web/dashboard`, `/bff/web/user-requests/my`
-- Web map: `/bff/web/facilities-map`
-- Mobile: `/bff/mobile/tasks`
-- Desktop: `/bff/desktop/monitoring` (+ legacy desktop endpoints)
-
-## Security
-- RBAC + ownership checks (IDOR mitigation)
-- Rate limit middleware (`429`)
-- Auth rate limits include `POST /auth/login`, `POST /auth/employee-login`, `POST /auth/register`, `POST /auth/refresh`
-- Security headers middleware
-- CORS from `CORS_ORIGINS` env (no wildcard for release)
-- Dev endpoints disabled by default (`ENABLE_DEV_ENDPOINTS=false`)
-- Fake-only sensor mode support (`SENSOR_SOURCE_MODE=fake_only`)
-- DTO validation (`extra=forbid`, enums, min/max length)
-- Mass-assignment prevention: owner ids from JWT only
-- XSS sanitation: user text fields sanitized with `bleach.clean`
-- Access-log sanitization: query tokens in URL are redacted/stripped in logs
-- Site frontend note: access/refresh tokens are currently stored in `localStorage` for backward compatibility; CSP + output escaping are enabled, but HttpOnly cookie migration is recommended for stricter production security
-- Site frontend note: Leaflet CDN includes SRI (`integrity`) and `crossorigin` attributes in `site/public/index.html`
-
-## Queue and Domain Events
-Flow: `command -> domain_event -> queue -> worker`
-- `domain_events` table stores command events.
-- `background_jobs` stores async job status.
-- Worker task `process_domain_event_task` updates domain event processing status.
-- Typed event contracts (`app/domain/events/`):
-  - `request_created`
-  - `request_assigned`
-  - `task_completed`
-  - `report_uploaded`
-  - `report_generation_started`
-  - `report_generated`
-- Dispatcher/subscribers:
-  - `app/services/events/event_dispatcher.py`
-  - `app/services/events/subscribers.py`
-
-## Cache and Metrics
-- `ENABLE_BFF_CACHE=false` by default (demo stability).
-- TTL in-memory cache for:
-  - `/bff/web/dashboard`
-  - `/bff/mobile/tasks`
-  - `/bff/desktop/monitoring`
-- Cache invalidation after commands:
-  - create request/task, task status transitions, report generation
-- Request metrics middleware logs:
-  - method/path/status/latency/user/role/error
-- Queue metrics logs:
-  - `queue_job_id`
-  - `queue_status`
-
-## Setup
+## 5. Backend (FastAPI)
+### Run locally
 1. `py -3.11 -m venv .venv`
-2. `.\.venv\Scripts\Activate.ps1`
+2. `\.venv\Scripts\Activate.ps1`
 3. `pip install -r requirements.txt`
 4. `alembic upgrade head`
 5. `uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload`
 
-## Tests
-1. `.\.venv\Scripts\Activate.ps1`
-2. `pip install pytest`
-3. `pytest -q`
+### Important endpoints
+- Auth: `/auth/register`, `/auth/login`, `/auth/employee-login`, `/auth/refresh`, `/auth/logout`, `/auth/me`
+- Web BFF: `/bff/web/*`
+- Mobile BFF: `/bff/mobile/tasks`
+- Desktop BFF: `/bff/desktop/*`
+- Reports: `/reports/upload`, `/reports/generate-delayed`, `/reports/jobs/{job_id}`
 
-## Render deployment (production)
-- Build command: `pip install -r requirements.txt`
-- Start command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-- Health check endpoint: `GET /health` (returns `{"status":"ok"}`)
-- Root health endpoint: `GET /` (returns `{"status":"ok","service":"sports-facility-api"}`)
-- Required env:
-  - `APP_ENV=production`
-  - `DEBUG=false`
-  - `ENABLE_DEV_ENDPOINTS=false`
-  - strong `SECRET_KEY` (>=32 chars, non-default)
-  - explicit `CORS_ORIGINS` for frontend domains (e.g. Vercel/Netlify)
-  - `CORS_ALLOW_ORIGIN_REGEX=` (empty in production)
-- Optional: use `render.yaml` from repo root as base config.
+## 6. Site (Node.js BFF + static)
+### Run locally
+1. `cd site`
+2. `npm install`
+3. `npm start`
 
-## Env example
-See `.env.example` (includes `CORS_ORIGINS`, token TTLs).
-- Recommended for this project: `SENSOR_SOURCE_MODE=fake_only`, `SENSOR_AUTOGEN_ENABLED=true`.
+### Required env (Render/production)
+- `APP_ENV=production`
+- `API_BASE_URL=https://sports-facility-api.onrender.com`
+- `PUBLIC_API_BASE_URL=/bff/web`
+- `CORS_ORIGINS=https://<your-site-domain>`
 
-## Swagger
-- `/docs`
-- `/openapi.json`
+## 7. Desktop client
+См. подробности в:
+- [desctop11 README](/c:/Users/viktoria/Desktop/API/desctop11/README.md)
 
-## Migrations and seed
-- Alembic migrations in `alembic/versions`.
-- Existing DB bootstrap/seed scripts remain project-specific.
-- Seed no longer resets passwords for existing users/employees; initial password is set only on first account creation.
+Quick start:
+1. `pip install PySide6 requests`
+2. `python desctop11/desctop11/desctop/main.py`
 
-## ngrok/mobile connection
-- Start backend locally and expose with `ngrok http 8000`.
-- Point clients to ngrok URL.
+## 8. Mobile client
+См. подробности в:
+- [EngineerMobile README](/c:/Users/viktoria/Desktop/API/EngineerMobile финал/EngineerMobile/README.md)
 
-## Dev fake sensor data for Desktop frontend
-- Endpoint: `GET /dev/fake-sensor-data`
-- Query params:
-  - `randomize=true|false` (default `false`)
-  - `write_to_db=true|false` (default `false`)
-- Protection:
-  - In `SENSOR_SOURCE_MODE=fake_only`: available for employee roles `OPERATOR` and `CHIEF_ENGINEER`.
-  - Outside fake-only mode: returns `403` when `ENABLE_DEV_ENDPOINTS=false`, `DEBUG=false`, or `APP_ENV=production`.
-  - `write_to_db=true` is allowed only for `CHIEF_ENGINEER`.
-- Desktop integration:
-  - Replace local hardcoded fake data with:
-    - `data = api_request("GET", "/dev/fake-sensor-data?randomize=true")`
-    - `facilities = data.get("facilities", [])`
-  - Map fields directly:
-    - object list: `facility["name"]`
-    - object info: `facility["address"]`, `facility["type"]`, `facility["description"]`, `facility["status"]`
-    - equipment table: `facility["equipment"]`
-    - sensors table: `facility["sensors"]`
-- Optional seeding script:
-  - `python scripts/generate_fake_sensor_data.py`
-  - `python scripts/seed_sample_reports.py` (creates sample report files + report rows)
+Quick start:
+1. `cd "EngineerMobile финал/EngineerMobile"`
+2. `npm install`
+3. `npm start`
 
-## Manual checks
-- Auth: register/login/employee-login/refresh/logout
-- Auth: update own user profile (`POST /auth/me`) including phone/email/username
-- Auth: change password (`POST /auth/change-password`) with current password check
-- Lifecycle transitions + invalid transition
-- RBAC and ownership checks
-- Rate limit on auth endpoints
-- BFF cache invalidation after commands
-- Celery/Flower background jobs status flow
-- Report template download, report upload, report file download, sample report seeding
-- Upload deduplication: `POST /reports/upload` supports `Idempotency-Key` header and content-hash deduplication
-- Desktop report registry (filters/pagination), report detail, inline preview
-- Facilities map: `/sports-facilities` and `/bff/web/facilities-map` return coordinates (`latitude`, `longitude`)
-- WebSocket/SSE auth:
-  - supports `Authorization: Bearer <access_token>`
-  - query token fallback remains for backward compatibility
+APK build:
+1. `npx eas-cli login`
+2. `npx eas-cli build --platform android --profile production`
 
-## Eventual consistency
-Commands complete immediately; read models/cached views may update with short delay.
-Clients should re-fetch data or poll job status.
+## 9. CQRS
+- Command services: `app/services/commands/`
+- Query services: `app/services/queries/`
+- Commands меняют состояние, queries только читают.
+
+## 10. Domain Events + Queue
+- Event models: `app/domain/events/`
+- Dispatcher: `app/services/events/event_dispatcher.py`
+- Поток: `command -> event -> queue -> worker`
+- Eventual consistency: `POST /reports/generate-delayed` + `GET /reports/jobs/{job_id}`
+
+## 11. Security
+- RBAC по ролям
+- Ownership (id владельца только из JWT)
+- Rate limit/bruteforce protection
+- JWT refresh rotation + logout invalidation
+- CORS whitelist only in production
+- CSP/security headers
+- XSS hardening (sanitize + escaping)
+- SQL injection protection (ORM/param queries)
+- No secrets in repository
+
+## 12. Tests and CI
+- Local tests: `pytest`
+- Compile check: `python -m compileall app tests`
+- CI workflow: `.github/workflows/ci.yml` (`push`, `pull_request`)
+
+## 13. Deploy
+### Backend on Render
+- Build: `pip install -r requirements.txt`
+- Start: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+
+### Site on Render
+- Root Directory: `site`
+- Build: `npm install`
+- Start: `npm start`
+
+### Mobile
+- EAS cloud build (APK)
+
+## 14. Security checklist for defense
+- [Security checklist](/c:/Users/viktoria/Desktop/API/docs/security_checklist.md)
+
+## 15. Additional docs
+- [Manual](/c:/Users/viktoria/Desktop/API/docs/readme_manual.md)
+- [Test plan](/c:/Users/viktoria/Desktop/API/docs/test_plan.md)
+- [SAD](/c:/Users/viktoria/Desktop/API/docs/sad.md)
+- [Risk register](/c:/Users/viktoria/Desktop/API/docs/risk_register.md)
+- [Application appendix](/c:/Users/viktoria/Desktop/API/docs/application_appendix.md)

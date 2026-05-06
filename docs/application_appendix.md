@@ -1,75 +1,72 @@
-# Приложение к документу
+﻿# Приложение к документу
 
-## RBAC
-- `USER`: web (`/bff/web/*`, `user_requests` own only).
-- `ENGINEER`: mobile (`/bff/mobile/*`, own tasks/reports only).
-- `OPERATOR`, `CHIEF_ENGINEER`: desktop (`/bff/desktop/*`, assignment/monitoring/logs).
-- Desktop WebSocket endpoints (`/ws/tasks`, `/ws/sensors`) are restricted to `OPERATOR`, `CHIEF_ENGINEER`.
+## 1. Состав системы
+- Backend API: FastAPI (`app/`), единый API для всех клиентов.
+- Web client: `site` (Node.js BFF + static UI для роли USER).
+- Mobile client: `EngineerMobile финал/EngineerMobile` (Expo, роль ENGINEER).
+- Desktop client: `desctop11/desctop11/desctop` (PySide6, роли OPERATOR/CHIEF_ENGINEER).
+- Data layer: Supabase PostgreSQL.
+- Queue layer: Celery + Redis/Valkey (best-effort, без падения API при недоступности брокера).
 
-## Ownership
-- `user_id`, `owner_id`, `engineer_id` are derived from JWT on backend.
-- `USER` can only access own requests.
-- `ENGINEER` can only access assigned tasks and related reports.
-- Unauthorized cross-owner access returns `404`/`403` depending on scenario.
+## 2. RBAC
+- `USER`: web-сценарии (`/bff/web/*`, свои заявки).
+- `ENGINEER`: mobile-сценарии (`/bff/mobile/*`, свои задачи/отчеты).
+- `OPERATOR`, `CHIEF_ENGINEER`: desktop-сценарии (`/bff/desktop/*`, назначение и мониторинг).
+- Desktop WebSocket (`/ws/tasks`, `/ws/sensors`) не предназначен для ENGINEER.
 
-## CQRS
-- Commands: request/task/report mutations (`POST` endpoints).
-- Queries: BFF dashboards/lists/details (`GET` endpoints).
-- Write model is normalized (ORM tables), read model is denormalized in BFF DTOs.
+## 3. Ownership
+- `user_id`, `engineer_id`, `owner_id` берутся на сервере из JWT.
+- Клиент не передает owner-поля как источник истины.
+- Доступ к чужим данным блокируется ответами `403/404`.
 
-## BFF
-- Web: `/bff/web/dashboard`, `/bff/web/user-requests/my`, `/bff/web/facilities-map`.
-- Mobile: `/bff/mobile/tasks`, `/bff/mobile/events/stream` (SSE).
-- Desktop: `/bff/desktop/*` aggregated views for requests/reports/logs/employees.
+## 4. API-контракт
+- Политика методов: только `GET` и `POST`.
+- API-контракт сохранен backward-compatible.
+- Формат полей: `snake_case`.
+- Upload отчета: `POST /reports/upload`, ключ файла строго `report_file`.
 
-## Background Jobs
-- Queue stack: Celery + Redis.
-- Report generation jobs: `POST /reports/generate`, `POST /reports/generate-delayed`.
-- Job status endpoints:
-  - `GET /jobs/{job_id}` (detailed internal model)
-  - `GET /reports/jobs/{job_id}` (report workflow status view)
+## 5. BFF
+- Web BFF: `/bff/web/dashboard`, `/bff/web/user-requests/my`, `/bff/web/facilities-map`.
+- Mobile BFF: `/bff/mobile/tasks`, `/bff/mobile/events/stream`.
+- Desktop BFF: `/bff/desktop/dashboard`, `/bff/desktop/requests*`, `/bff/desktop/reports*`, `/bff/desktop/logs`, `/bff/desktop/employees`.
 
-## Queue
-- Flow: command -> enqueue -> worker -> persist result/error.
-- API responds immediately with job metadata; heavy work is async.
+## 6. CQRS
+- Команды (write): создание/назначение/смена статусов/загрузка отчетов/обновление профиля.
+- Запросы (read): dashboard, списки задач/заявок/отчетов, map DTO, логи.
+- Реализация: `app/services/commands/` и `app/services/queries/`.
 
-## Domain Events
-- Events are stored in `domain_events`, then processed by background worker.
-- Core flow: command -> domain event -> queue -> worker -> read-model/log updates.
+## 7. Domain events и очередь
+- Слой событий: `app/domain/events/`.
+- Dispatcher: `app/services/events/event_dispatcher.py`.
+- Поток: `command -> domain_event -> queue -> worker`.
+- События: `request_created`, `request_assigned`, `task_completed`, `report_uploaded`, `report_generation_started`, `report_generated`.
 
-## Eventual Consistency
-- Commands commit immediately.
-- Read models and realtime clients may observe updates with short delay.
-- Clients must support brief polling/retry after command execution.
+## 8. Eventual consistency
+- Тяжелые операции (генерация отчетов) выполняются фоном.
+- Клиент получает `job_id`, затем опрашивает `GET /reports/jobs/{job_id}`.
+- Read-модель может обновляться с небольшой задержкой.
 
-## Logging
-- Request metrics include method/path/status/latency/user/role (when enabled).
-- Security logging includes auth/report/task lifecycle actions.
-- Sensitive token data is redacted from access logs.
+## 9. Безопасность
+- JWT access/refresh, refresh rotation, logout invalidation.
+- RBAC + ownership на каждом защищенном endpoint.
+- Rate limiting на auth endpoint'ах.
+- DTO-валидация и защита от mass assignment.
+- CORS whitelist в production (без wildcard).
+- CSP и security headers.
+- Санитизация пользовательского текста (XSS hardening).
+- В логах скрываются токены и чувствительные данные.
 
-## Hot Spots
-- Auth endpoints, desktop request lists, mobile task lists, report upload/generation, realtime streams.
-- Queue processing and report IO are monitored through action logs and job statuses.
+## 10. Логирование и горячие точки
+- Логируются: `method`, `path`, `status_code`, `duration_ms`, `user_id`, `role`, ошибки.
+- Горячие точки: auth, desktop requests, mobile tasks, reports upload/generation, realtime каналы.
 
-## Cache Invalidation
-- Read caches are invalidated after write operations (task/request/report commands).
-- BFF cache keys are role/user scoped.
+## 11. Deployment
+- Backend: Render Web Service (`uvicorn app.main:app --host 0.0.0.0 --port $PORT`).
+- Site: Render Web Service (`site`, `npm install`, `npm start`).
+- Mobile: EAS build APK.
+- Desktop: локальный запуск/пакетирование.
 
-## Security
-- Strict DTO validation (`extra=forbid`) and server-side ownership checks.
-- Rate limiting and brute-force protection on auth endpoints.
-- CORS is explicit in production (`*` forbidden).
-- CSP/security headers middleware is enabled.
-
-## API Methods Policy
-- API methods policy: only `GET` and `POST` for current and new HTTP endpoints.
-- No `PATCH`, `PUT`, `DELETE`, `HEAD` API endpoints are used.
-
-## Domain Events (Final)
-- Typed events are declared in `app/domain/events/`.
-- Dispatcher is implemented in `app/services/events/event_dispatcher.py`.
-- Subscribers are implemented in `app/services/events/subscribers.py`.
-- Async flow: `command -> domain event row -> celery queue -> worker -> subscribers`.
-- Eventual consistency is explicit for delayed reports via:
-  - `POST /reports/generate-delayed`
-  - `GET /reports/jobs/{job_id}`
+## 12. Тестирование
+- Автотесты: `pytest`.
+- CI: GitHub Actions (`.github/workflows/ci.yml`).
+- Security smoke checks: `docs/security_checklist.md`.
