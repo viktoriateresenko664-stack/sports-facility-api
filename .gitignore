@@ -49,6 +49,10 @@ google-services.json
 
 # Storage / artifacts
 storage/reports/
+приложение куцебо/
+desctop11/desctop11/РАБОЧИЙ.txt
+scripts/update_kutsebo_docs.py
+scripts/update_kutsebo_docs_structured.py
 *.zip
 *.rar
 *.7z
