@@ -591,11 +591,8 @@ sports-facility-api/
 
 ```text
 docs/test_plan.md
-docs/security_checklist.md
 docs/sad.md
-docs/risk_register.md
-docs/readme_manual.md
-docs/application_appendix.md
+docs/risk.md
 ```
 
 ---
